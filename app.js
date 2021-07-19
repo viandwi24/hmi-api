@@ -22,6 +22,16 @@ const apiResponse = (status, data = [], message = 'success') => {
 }
 
 // routes
+app.get('/test', async (req, res) => {
+  const id = 54
+  const value = 0
+  // return res.json({ id, value })
+  const a = await db.any('UPDATE data SET value = 0', [value, id], e => e)
+  // const a = await db.any('UPDATE data SET value = $1 WHERE tag_id IN (55, 59, 66, 62, 67)', [value, id], e => e)
+  // const a = await db.any('SELECT * FROM data')
+  return res.json(a)
+})
+// TAGS
 app.get('/tags', async (req, res) => {
   try {
     const data = await db.any('SELECT t.id as "id", t.name as "name", t.tipedata as "tipedata", d.value as "value" FROM tags AS t INNER JOIN data AS d ON t.id=d.tag_id')
@@ -59,6 +69,15 @@ app.put('/tags', async (req, res) => {
     return res.json(apiResponse(true, { data, tag }, 'nothing change.'))
   } catch (error) {
     console.log(error)
+    return res.json(error)
+  }
+})
+// REPORTS
+app.get('/reports', async (req, res) => {
+  try {
+    const data = await db.any('SELECT * FROM controls')
+    return res.json(apiResponse(true, data, 'getting data success.'))
+  } catch (error) {
     return res.json(error)
   }
 })
