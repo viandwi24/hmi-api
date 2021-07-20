@@ -47,19 +47,23 @@ app.put('/tags', async (req, res) => {
     // find
     let tag
     try {
-      tag = await db.oneOrNone('SELECT * FROM tags INNER JOIN data ON tags.id=data.tag_id WHERE name = $1', [data.name], e => e)
+      tag = await db.oneOrNone('SELECT * FROM tags WHERE name = $1', [data.name], e => e)
     } catch (error) {
       return res.json(apiResponse(false, { data }, 'getting tag error.'))
     }
+    // return console.log(tag)
 
-    if (tag.value !== data.value) {
+    if (tag) {
       let updated
       try {
         let value = data.value
         if (typeof value === 'boolean') {
           value = (value === true) ? 1 : 0
         }
-        updated = await db.oneOrNone('UPDATE data SET value = $1 WHERE tag_id = $2', [value, tag.id], e => e)
+        // INSERT INTO table_name(column1, column2, …) VALUES (value1, value2, …);
+        // updated = await db.oneOrNone('UPDATE data SET value = $1 WHERE tag_id = $2', [value, tag.id], e => e)
+        updated = await db.oneOrNone('INSERT INTO controls(tag_id, value, last_update, acknowledge) VALUES ($1, $2, null, false)', [tag.id, value], e => e)
+        console.log(`[Command] Sending Command component ${tag.id} with value ${value}`)
       } catch (error) {
         return res.json(apiResponse(false, { data, tag }, 'updating data error.'))
       }
@@ -68,8 +72,7 @@ app.put('/tags', async (req, res) => {
 
     return res.json(apiResponse(true, { data, tag }, 'nothing change.'))
   } catch (error) {
-    console.log(error)
-    return res.json(error)
+    return res.json(apiResponse(true, { data, tag, error }, 'cannt change.'))
   }
 })
 // REPORTS
