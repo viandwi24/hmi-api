@@ -23,7 +23,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
 }))
 app.use(bodyParser.json());
-app.use(logger)
+// app.use(logger)
 
 // funcs
 const apiResponse = (status, data = [], message = 'success') => {
@@ -44,7 +44,20 @@ app.get('/test', async (req, res) => {
 // TAGS
 app.get('/tags', async (req, res) => {
   try {
-    const data = await db.any('SELECT t.id as "id", t.name as "name", t.tipedata as "tipedata", d.value as "value" FROM tags AS t INNER JOIN data AS d ON t.id=d.tag_id')
+    const tags = await db.any(`
+      SELECT
+        t.id as "id", t.name as "name", t.tipedata as "tipedata", t.device_id as "device_id", d.value as "value"
+      FROM 
+        tags AS t 
+      INNER JOIN 
+        data AS d 
+          ON t.id=d.tag_id
+    `)
+    const devices = await db.any('SELECT * FROM devices')
+    const data = {
+      tags,
+      devices
+    }
     return res.json(apiResponse(true, data, 'getting data success.'))
   } catch (error) {
     return res.json(error)
@@ -73,7 +86,7 @@ app.put('/tags', async (req, res) => {
         // INSERT INTO table_name(column1, column2, …) VALUES (value1, value2, …);
         // updated = await db.oneOrNone('UPDATE data SET value = $1 WHERE tag_id = $2', [value, tag.id], e => e)
         updated = await db.oneOrNone('INSERT INTO controls(tag_id, value, last_update, acknowledge) VALUES ($1, $2, null, false)', [tag.id, value], e => e)
-        console.log(`[Command] Sending Command component ${tag.id} with value ${value}`)
+        console.log(`[Command] Sending Command to component ${tag.id} with value ${value}`)
       } catch (error) {
         return res.json(apiResponse(false, { data, tag }, 'updating data error.'))
       }
