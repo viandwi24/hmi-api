@@ -3,11 +3,19 @@ const cors = require('cors')
 const bodyParser = require('body-parser');
 const app = express()
 const port = process.env.PORT || 8000
+const logger = require('./lib/log')
 
 // db
+const dbOptions = {
+  host: '167.71.200.193',
+  user: 'postgres',
+  port: 5432,
+  password: '123456',
+  db: 'postgres',
+}
 const pgOptions = {};
 const pg = require('pg-promise')(pgOptions);
-const db = pg('postgres://postgres:123456@188.166.222.247:5432/postgres');
+const db = pg(`postgres://${dbOptions.user}:${dbOptions.password}@${dbOptions.host}:${dbOptions.port}/${dbOptions.db}`);
 
 // middleware
 app.use(cors({
@@ -15,6 +23,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
 }))
 app.use(bodyParser.json());
+app.use(logger)
 
 // funcs
 const apiResponse = (status, data = [], message = 'success') => {
@@ -31,6 +40,7 @@ app.get('/test', async (req, res) => {
   // const a = await db.any('SELECT * FROM data')
   return res.json(a)
 })
+
 // TAGS
 app.get('/tags', async (req, res) => {
   try {
@@ -75,6 +85,7 @@ app.put('/tags', async (req, res) => {
     return res.json(apiResponse(true, { data, tag, error }, 'cannt change.'))
   }
 })
+
 // REPORTS
 app.get('/reports', async (req, res) => {
   try {
