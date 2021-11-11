@@ -1,9 +1,13 @@
 const express = require('express')
+const moment = require('moment')
 const cors = require('cors')
 const bodyParser = require('body-parser');
 const app = express()
 const port = process.env.PORT || 8000
 const logger = require('./lib/log')
+
+// helper
+const { now } = require('./lib/helper')
 
 // db
 const dbOptions = {
@@ -13,9 +17,10 @@ const dbOptions = {
   password: '123456',
   db: 'postgres',
 }
+const dbQuery = `postgres://${dbOptions.user}:${dbOptions.password}@${dbOptions.host}:${dbOptions.port}/${dbOptions.db}`;
 const pgOptions = {};
 const pg = require('pg-promise')(pgOptions);
-const db = pg(`postgres://${dbOptions.user}:${dbOptions.password}@${dbOptions.host}:${dbOptions.port}/${dbOptions.db}`);
+const db = pg(dbQuery);
 
 // middleware
 app.use(cors({
@@ -23,11 +28,13 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
 }))
 app.use(bodyParser.json());
-// app.use(logger)
+app.use(logger)
+app.use( express.urlencoded({extended: true}) )
+app.use(express.json())
 
 // funcs
-const apiResponse = (status, data = [], message = 'success') => {
-  return { status, message, data }
+const apiResponse = (status, data = [], message = 'success', params = {}) => {
+  return Object.assign({ status, message, data }, params)
 }
 
 // routes
@@ -100,15 +107,42 @@ app.put('/tags', async (req, res) => {
 })
 
 // REPORTS
-app.get('/reports', async (req, res) => {
+app.get('/reports-label', async (req, res) => {
   try {
-    const data = await db.any('SELECT * FROM controls')
-    return res.json(apiResponse(true, data, 'getting data success.'))
+    const data = await db.any("SELECT * FROM manual_labels");
+    return res.json(apiResponse(true, data, 'getting data success.'));
   } catch (error) {
-    return res.json(error)
+    console.error(error);
+    return res.json(error);
   }
 })
+app.get('/reports', async (req, res) => {
+  let date = req.query.date || undefined
+  try {
+    let filtered = ``
+    if (date) {
+      const filterDate = moment(date).set({hour:0,minute:0,second:0,millisecond:0})
+      filtered = `WHERE "reportDate" > '${filterDate.format("YYYY-MM-DD HH:mm:ss")}' AND "reportDate" < '${filterDate.add('days', 1).format("YYYY-MM-DD HH:mm:ss")}'`
+    }
+    const query = `
+      SELECT
+        "id", CAST("reportDate" AS DATE) as "reportDate", "label_id", "name" as "label_name", "tipe", "value"
+      FROM
+        manual m JOIN manual_labels ml ON m.label_id=ml.id
+      ${filtered}
+    `
+    const data = await db.any(query);
+    return res.json(apiResponse(true, data, 'getting data success.', { query }));
+  } catch (error) {
+    console.error(error);
+    return res.json(error);
+  }
+});
+// app.get('/reports', function(){});
+// const newData = [2, 20.0, 0];
+// const created = await db.oneOrNone(`INSERT INTO manual ("updatedAt", "label_id", "value", "reportDate", "tipe") VALUES (NOW(), $1, $2, NOW(), $3)`, newData, e => e);
 
+// 
 app.listen(port, () => {
-  console.log(`Server running on :${port}`)
-})
+  console.log(`Server running on :${port}`);
+});
