@@ -5,6 +5,7 @@ const bodyParser = require('body-parser');
 const app = express()
 const port = process.env.PORT || 8000
 const logger = require('./lib/log')
+const excel = require('./lib/excel.js')
 
 // helper
 const { now } = require('./lib/helper')
@@ -118,11 +119,18 @@ app.get('/reports-label', async (req, res) => {
 })
 app.get('/reports', async (req, res) => {
   let date = req.query.date || undefined
+  let month = (req.query.month * 1) || undefined
+  let year = (req.query.year*1) || undefined
   try {
     let filtered = ``
     if (date) {
       const filterDate = moment(date).set({hour:0,minute:0,second:0,millisecond:0})
       filtered = `WHERE "reportDate" > '${filterDate.format("YYYY-MM-DD HH:mm:ss")}' AND "reportDate" < '${filterDate.add('days', 1).format("YYYY-MM-DD HH:mm:ss")}'`
+    } else if (month && year) {
+      const startMonth = moment().set({year: year, month: (month - 1), date: 1, hour:0,minute:0,second:0,millisecond:0});
+      const lastDay = moment().set({year: year, month: (month ), date: 1, hour:0,minute:0,second:0,millisecond:0}).subtract(1, 'second')
+      console.log(startMonth.format("YYYY-MM-DD HH:mm:ss"), lastDay.format("YYYY-MM-DD HH:mm:ss"))
+      filtered = `WHERE "reportDate" > '${startMonth.format("YYYY-MM-DD HH:mm:ss")}' AND "reportDate" < '${lastDay.format("YYYY-MM-DD HH:mm:ss")}'`
     }
     const query = `
       SELECT
@@ -133,6 +141,69 @@ app.get('/reports', async (req, res) => {
     `
     const data = await db.any(query);
     return res.json(apiResponse(true, data, 'getting data success.', { query }));
+  } catch (error) {
+    console.error(error);
+    return res.json(error);
+  }
+});
+
+app.get('/download', async (req, res) => {
+  let tipe = req.query.tipe || undefined
+  let month = (req.query.month * 1) || undefined
+  let year = (req.query.year * 1) || undefined
+  try {
+    let filtered = ``
+    if (month && year) {
+      const startMonth = moment().set({year: year, month: (month - 1), date: 1, hour:0,minute:0,second:0,millisecond:0});
+      const lastDay = moment().set({year: year, month: (month ), date: 1, hour:0,minute:0,second:0,millisecond:0}).subtract(1, 'second')
+      console.log(startMonth.format("YYYY-MM-DD HH:mm:ss"), lastDay.format("YYYY-MM-DD HH:mm:ss"))
+      filtered = `WHERE "reportDate" > '${startMonth.format("YYYY-MM-DD HH:mm:ss")}' AND "reportDate" < '${lastDay.format("YYYY-MM-DD HH:mm:ss")}'`
+    }
+    const query = `
+      SELECT
+        "id", CAST("reportDate" AS DATE) as "reportDate", "label_id", "name" as "label_name", "tipe", "value"
+      FROM
+        manual m JOIN manual_labels ml ON m.label_id=ml.id
+      ${filtered}
+
+      ORDER BY CAST("reportDate" AS DATE)
+    `
+    const data = await db.any(query);
+    if( tipe == 'inlet' ) {
+      let option = {
+        title: `1. Data Inlet (${(month)}${year.toString().substr(-2)})`,
+        data,
+        month,
+        year
+      };
+      var resultExcel = await excel.inlet(option);
+      res.attachment(option.title + '.xlsx');
+      res.send(resultExcel);
+    } else if( tipe == 'outlet' ) {
+      let option = {
+        title: `2. Data Outlet (${(month)}${year.toString().substr(-2)})`,
+        data,
+        month,
+        year
+      };
+      var resultExcel = await excel.outlet(option);
+      res.attachment(option.title + '.xlsx');
+      res.send(resultExcel);
+    } else if( tipe == 'bpa' ) {
+      let option = {
+        title: `3. BPA Kinerja IPAL (${(month)}${year.toString().substr(-2)})`,
+        data,
+        month,
+        year
+      };
+      var resultExcel = await excel.bpa(option);
+      res.attachment(option.title + '.xlsx');
+      res.send(resultExcel);
+    } else {
+      return res.json({
+        tipe: 'unknown'
+      });
+    }
   } catch (error) {
     console.error(error);
     return res.json(error);
