@@ -125,7 +125,7 @@ app.get('/reports', async (req, res) => {
     let filtered = ``
     if (date) {
       const filterDate = moment(date).set({hour:0,minute:0,second:0,millisecond:0})
-      filtered = `WHERE "reportDate" > '${filterDate.format("YYYY-MM-DD HH:mm:ss")}' AND "reportDate" < '${filterDate.add('days', 1).format("YYYY-MM-DD HH:mm:ss")}'`
+      filtered = `WHERE "reportDate" >= '${filterDate.toDate().toISOString()}' AND "reportDate" < '${filterDate.add('days', 1).toDate().toISOString()}'`
     } else if (month && year) {
       const startMonth = moment().set({year: year, month: (month - 1), date: 1, hour:0,minute:0,second:0,millisecond:0});
       const lastDay = moment().set({year: year, month: (month ), date: 1, hour:0,minute:0,second:0,millisecond:0}).subtract(1, 'second')
@@ -206,6 +206,63 @@ app.get('/download', async (req, res) => {
     }
   } catch (error) {
     console.error(error);
+    return res.json(error);
+  }
+});
+
+app.post('/reports', async (req, res) => {
+  try {
+    const queries = []
+    const { items, date } = req.body;
+    const filterDate = moment(date).set({hour:0,minute:0,second:0,millisecond:0})
+    filtered = `WHERE "reportDate" >= '${filterDate.toDate().toISOString()}' AND "reportDate" < '${filterDate.add('days', 1).toDate().toISOString()}'`
+    const query = `
+      SELECT
+        "id", CAST("reportDate" AS DATE) as "reportDate", "label_id", "name" as "label_name", "tipe", "value"
+      FROM
+        manual m JOIN manual_labels ml ON m.label_id=ml.id
+      ${filtered}
+    `
+    const availableReports = await db.any(query);
+
+    const newItems = []
+    const updatedItems = []
+
+    // check if item already exist
+    items.forEach(item => {
+      const label_id = item.label_id
+      const searchInAvailable = availableReports.find(report => report.label_id === label_id)
+      if (searchInAvailable) {
+        updatedItems.push(item)
+      } else {
+        if (typeof item.inlet == undefined || typeof item.outlet == undefined) return
+        if (item.inlet == null || item.outlet == null) return
+        newItems.push(item)
+      }      
+    });
+
+    // insert new items
+    const reportDate = moment(date).toDate().toISOString()
+    if (newItems.length > 0) {
+      for (let i = 0; i < newItems.length; i++) {
+        const item = newItems[i]
+        await db.any(`INSERT INTO manual ("updatedAt", "reportDate", "label_id", "tipe", "value") VALUES (NOW(), $1, $2, $3, $4)`, [reportDate, item.label_id, 1, parseFloat(item.inlet)])
+        await db.any(`INSERT INTO manual ("updatedAt", "reportDate", "label_id", "tipe", "value") VALUES (NOW(), $1, $2, $3, $4)`, [reportDate, item.label_id, 0, parseFloat(item.outlet)])
+      }
+    }
+
+    // update items
+    if (updatedItems.length > 0) {
+      for (let i = 0; i < updatedItems.length; i++) {
+        const item = updatedItems[i]
+        await db.any(`UPDATE manual SET "value" = $1 WHERE "label_id" = $2 AND "tipe" = $3`, [parseFloat(item.inlet), item.label_id, 1])
+        await db.any(`UPDATE manual SET "value" = $1 WHERE "label_id" = $2 AND "tipe" = $3`, [parseFloat(item.outlet), item.label_id, 0])
+      }
+    }
+
+    const data = { reportDate, items, date, newItems, updatedItems, queries };
+    return res.json(apiResponse(true, data, 'getting data success.'));
+  } catch (error) {
     return res.json(error);
   }
 });
